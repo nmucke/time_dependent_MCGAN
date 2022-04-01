@@ -21,9 +21,6 @@ def animateSolution(x,time,sol_list,gif_name='pipe_flow_simulation',
                     xlabel='Location',ylabel='Pressure'):
     fig = plt.figure()
     ax = plt.axes(xlim=(x[0], x[-1]), ylim=(np.min(sol_list),np.max(sol_list)))
-    #ax = plt.axes(xlim=(x[0], x[-1]), ylim=(-1,1))
-
-    #ax = plt.axes(xlim=(x[0], x[-1]), ylim=(np.min(sol_list),1003))
 
     plt.grid(True)
     plt.xlabel(xlabel)
@@ -41,8 +38,6 @@ def animateSolution(x,time,sol_list,gif_name='pipe_flow_simulation',
         line.set_data(x, y)
         return line,
 
-    #Writer = animation.writers['ffmpeg']
-    #writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
     writergif = animation.PillowWriter(fps=10)
 
     anim = animation.FuncAnimation(fig, animate, init_func=init,
@@ -113,7 +108,7 @@ def run(xl,Cd,leak_start):
     outlet_condition = lambda t: outPressure + 0.025*outPressure*np.sin(t/1.2*2*np.pi)
 
     inlet_noise_var = 0.1
-    outlet_noise_var = 1e1
+    outlet_noise_var = 0*1e1
 
     params = {'velocity': velocity,
               'inlet_condition': inlet_condition,
@@ -138,18 +133,18 @@ def run(xl,Cd,leak_start):
     smin = 0
     smax = 1041.6958820572913
 
-    K = 75
-    N = 3
+    K = 2
+    N = 20
 
     integrator = 'ImplicitEuler'
     gas_model = DG_models.GasPipeflow(xmin=smin, xmax=smax, K=K, N=N,
                                       integrator=integrator,
                                       params=params,
                                       pressure_func=pressure_func,
-                                      stabilizer_type='slope_limit', Nc=1, s=2,
+                                      stabilizer_type='filter', Nc=1, s=2,
                                       )
 
-    final_time = 15.
+    final_time = 5.
 
     x_vec = np.reshape(gas_model.x, (N + 1) * K, 'F')
 
@@ -189,7 +184,7 @@ def run(xl,Cd,leak_start):
 
 if __name__ == '__main__':
 
-    u, rho, pressure, x_uniform, time = run(800, .84, 5)
+    u, rho, pressure, x_uniform, time = run(800, .84, 1)
     pressure *= 1e-5
 
     animateSolution(x_uniform, time, u, gif_name='velocity',
