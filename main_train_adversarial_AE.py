@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
     seed_everything()
 
-    continue_training = True
+    continue_training = False
     train = False
 
     if not train:
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     critic = models.Critic(**critic_params).to(device)
 
     recon_learning_rate = 1e-2
-    recon_weight_decay = 1e-12
+    recon_weight_decay = 1e-8
 
     reg_learning_rate = 1e-3
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
         training_params = {
             'n_critic': 3,
             'gamma': 10,
-            'n_epochs': 100,
+            'n_epochs': 200,
             'save_string': 'model_weights/AdvAE',
             'device': device
         }

@@ -18,6 +18,7 @@ torch.manual_seed(0)
 np.random.seed(0)
 torch.set_default_tensor_type(torch.FloatTensor)
 
+
 if __name__ == '__main__':
 
     cuda = False

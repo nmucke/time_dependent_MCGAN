@@ -17,15 +17,32 @@ def init_condition(coef_vec, x_vec):
     init = init / np.max(np.abs(init))
     return init
 
+
+def init_condition_gaussian(coef_vec, x_vec):
+    mu = coef_vec[0]
+    sigma = coef_vec[1]
+    return np.exp(-np.power(x_vec - mu, 2.) / (2 * np.power(sigma, 2.)))
+
+
 def compute_advection_diffusion_sol(solver_params,
                                     PDE_params,
                                     output_time=False):
-
+    '''
     coef_mean = np.zeros(solver_params['init_num_coefs'])
     coef_std = np.arange(solver_params['init_num_coefs'],0,-1)
 
     coef_vec = np.random.normal(coef_mean, coef_std)
     init = init_condition(coef_vec, x_vec)
+    init = init[1:-1]
+    '''
+
+
+    mu = 0
+    sigma = np.random.normal(0.15, 0.05)
+
+    #coef_vec = np.array([mu, sigma])
+    coef_vec = np.array([mu, 0.15])
+    init = init_condition_gaussian(coef_vec, x_vec)
     init = init[1:-1]
 
     adv_diff = AdvectionDiffusion(solver_params['xmin'],
@@ -85,21 +102,21 @@ if __name__ == '__main__':
 
 
     save_string = 'adv_diff'
-    id_list = range(0,100000)
+    id_list = range(0,10000)
     train_data = True
 
     ray.init(num_cpus=30)
 
     velocity = np.random.uniform(0.1, 0.5, len(id_list))
-    diffusion = np.random.uniform(0.006, 0.009, len(id_list))
+    diffusion = np.random.uniform(0.0075, 0.0125, len(id_list))
     for idx in id_list:
-        PDE_params = {'velocity': velocity[idx],
+        PDE_params = {'velocity': 0.2,#velocity[idx],
                       'diffusion': diffusion[idx]}
         generate_and_save_data.remote(save_string=save_string,
                                      save_id=idx,
                                      solver_params=solver_params,
                                      PDE_params=PDE_params,
-                                     train_data=True)
+                                     train_data=train_data)
 
     '''
 
