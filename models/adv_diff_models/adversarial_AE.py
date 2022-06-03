@@ -77,13 +77,25 @@ class Encoder(nn.Module):
     def __init__(self, latent_dim=32, input_dim=128, hidden_neurons=[64, 32, 16]):
         super().__init__()
 
-        self.activation = nn.LeakyReLU()
-        dense_neurons = [input_dim] + hidden_neurons
+        self.activation = nn.Tanh()
+        #dense_neurons = [input_dim] + hidden_neurons
+        dense_neurons = [1] + hidden_neurons
 
+        '''
         self.dense_layers = nn.ModuleList(
                 [nn.Linear(
                         in_features=dense_neurons[i],
                         out_features=dense_neurons[i+1]
+                ) for i in range(len(dense_neurons)-1)]
+        )
+        '''
+
+        self.dense_layers = nn.ModuleList(
+                [nn.Conv1d(
+                        in_channels=dense_neurons[i],
+                        out_channels=dense_neurons[i+1],
+                        kernel_size=7,
+                        stride=2
                 ) for i in range(len(dense_neurons)-1)]
         )
 
@@ -92,29 +104,60 @@ class Encoder(nn.Module):
                  for i in range(len(dense_neurons) - 1)]
         )
 
-        self.dense_out = nn.Linear(in_features=dense_neurons[-1],
+        #self.dense_out = nn.Linear(in_features=dense_neurons[-1],
+        #                           out_features=latent_dim,
+        #                           bias=False
+        #                           )
+        self.dense_out1 = nn.Linear(in_features=3*dense_neurons[-1],
+                                   out_features=dense_neurons[-1],
+                                   bias=True
+                                   )
+        self.dense_out2 = nn.Linear(in_features=dense_neurons[-1],
                                    out_features=latent_dim,
                                    bias=False
                                    )
 
     def forward(self, x):
-
+        x = x.unsqueeze(1)
         for dense_layer, batch_norm in zip(self.dense_layers,
                                            self.batch_norm_layers):
             x = dense_layer(x)
             x = self.activation(x)
             x = batch_norm(x)
 
-        x = self.dense_out(x)
+        x = x.view(x.size(0), -1)
+        x = self.dense_out1(x)
+        x = self.activation(x)
+        x = self.dense_out2(x)
         return x
 
 class Decoder(nn.Module):
     def __init__(self, latent_dim=32, input_dim=128, hidden_neurons=[]):
         super().__init__()
 
-        self.activation = nn.LeakyReLU()
-        dense_neurons = [latent_dim] + hidden_neurons
+        self.activation = nn.Tanh()
 
+        self.dense_neurons = hidden_neurons + [1]
+
+        out_pad = [0, 1, 0, 1]
+        bias = [True, True, True, False]
+
+        self.dense_in1 = nn.Linear(in_features=latent_dim,
+                              out_features=self.dense_neurons[0])
+        self.dense_in2 = nn.Linear(in_features=self.dense_neurons[0],
+                              out_features=3*hidden_neurons[0])
+
+        self.dense_layers = nn.ModuleList(
+                [nn.ConvTranspose1d(
+                        in_channels=self.dense_neurons[i],
+                        out_channels=self.dense_neurons[i + 1],
+                        kernel_size=7,
+                        stride=2,
+                        output_padding=out_pad[i],
+                        bias=bias[i]
+                ) for i in range(len(self.dense_neurons) - 1)]
+        )
+        '''
         self.dense_layers = nn.ModuleList(
                 [nn.Linear(
                         in_features=dense_neurons[i],
@@ -125,28 +168,34 @@ class Decoder(nn.Module):
                                    out_features=input_dim,
                                    bias=False
                                    )
+        '''
 
         self.batch_norm_layers = nn.ModuleList(
-                [nn.BatchNorm1d(dense_neurons[i+1])
-                 for i in range(len(dense_neurons) - 1)]
+                [nn.BatchNorm1d(self.dense_neurons[i])
+                 for i in range(len(self.dense_neurons) - 1)]
         )
 
     def forward(self, x):
 
+        x = self.dense_in1(x)
+        x = self.activation(x)
+        x = self.dense_in2(x)
+        x = x.view(x.size(0), self.dense_neurons[0], 3)
+
         for dense_layer, batch_norm in zip(self.dense_layers,
                                            self.batch_norm_layers):
-            x = dense_layer(x)
             x = self.activation(x)
             x = batch_norm(x)
-
-        x = self.dense_out(x)
-        return x
+            x = dense_layer(x)
+        #x = self.dense_out(x)
+        return x.squeeze(1)
 
 class Critic(nn.Module):
     def __init__(self, latent_dim=32, hidden_neurons=[]):
         super().__init__()
 
-        self.activation = nn.LeakyReLU()
+        self.activation = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
         dense_neurons = [latent_dim] + hidden_neurons
 
         self.dense_layers = nn.ModuleList(
@@ -175,7 +224,7 @@ class Critic(nn.Module):
             #x = batch_norm(x)
 
         x = self.dense_out(x)
-        return x
+        return self.sigmoid(x)
 
 class AutoEncoder():
     def __init__(self, latent_dim=32, input_dim=128,
@@ -200,12 +249,12 @@ if __name__ == '__main__':
     def out_size(in_size, stride, padding, kernel_size, out_pad):
         return (in_size-1)*stride-2*padding+1*(kernel_size-1)+out_pad+1
 
-    stride = [2, 2, 2, 2, 2, 1]
+    stride = [2, 2, 2, 2, 2]
     padding = [0, 0, 0, 0, 0, 0]
-    out_pad = [1, 1, 0, 0, 0, 0]
-    kernel_size = [8, 8, 8, 2, 4, 4]
+    out_pad = [0, 1, 0, 1, 0, 0]
+    kernel_size = [7,7,7,7, 7]
 
-    in_size = 2
+    in_size = 3
     for i in range(len(stride)):
         in_size = out_size(in_size, stride[i], padding[i], kernel_size[i],
                            out_pad[i])

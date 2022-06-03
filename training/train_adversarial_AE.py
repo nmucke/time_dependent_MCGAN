@@ -39,6 +39,8 @@ class TrainAdversarialAE():
 
         self.reconstruction_loss_function = nn.MSELoss()
 
+        self.critic_loss_function = nn.BCELoss()
+
     def train(self, dataloader):
         """Train generator and critic"""
 
@@ -109,37 +111,48 @@ class TrainAdversarialAE():
             #real_pars = real_pars[shuffle_ids]
             #real_pars = real_pars.to(self.device)
 
-            recon_loss = self.reconstruction_train_step(real_data)
             self.encoder.eval()
-            for i in range(self.n_critic):
-                critic_loss, gp = self.critic_train_step(real_data)
+            critic_loss, gp = self.critic_train_step(real_data)
             self.encoder.train()
-            enc_loss = self.regularization_train_step(real_data)
+
+            if bidx % self.n_critic == 0:
+                recon_loss = self.reconstruction_train_step(real_data)
+                #enc_loss = self.regularization_train_step(real_data)
 
 
-        return recon_loss, critic_loss, enc_loss, gp
+        return recon_loss, critic_loss, 1,1#enc_loss, gp
 
     def critic_train_step(self, data):
         """Train critic one step"""
 
         batch_size = data.size(0)
+        self.encoder.eval()
 
         self.cri_opt.zero_grad()
 
         generated_latent_data = self.encoder(data)
         true_latent_data = self.sample(batch_size)
 
-        #critic_real = self.critic(true_latent_data)
-        #critic_generated = self.critic(generated_latent_data)
+        critic_real = self.critic(true_latent_data)
+        critic_generated = self.critic(generated_latent_data)
 
-        grad_penalty = self.gradient_penalty(true_latent_data, generated_latent_data)
-        cri_loss = self.critic(generated_latent_data).mean() \
-                 - self.critic(true_latent_data).mean() + grad_penalty
+        target_real = torch.ones_like(critic_real)
+        target_generated = torch.zeros_like(critic_generated)
 
-        #cri_loss = #-torch.mean(torch.log(critic_real+self.eps) + torch.log(1 - critic_generated+self.eps))
+        #grad_penalty = self.gradient_penalty(true_latent_data, generated_latent_data)
+        #cri_loss = self.critic(generated_latent_data).mean() \
+        #         - self.critic(true_latent_data).mean() + grad_penalty
+
+        #cri_loss = -torch.mean(torch.log(critic_real+self.eps) \
+        #                       + torch.log(1 - critic_generated+self.eps))
+
+        cri_loss = 0.5 * self.critic_loss_function(critic_real, target_real) \
+                   + 0.5 * self.critic_loss_function(critic_generated, target_generated)
 
         cri_loss.backward()
         self.cri_opt.step()
+
+        self.encoder.train()
 
         '''
         a = list(self.critic.parameters())[0].clone()
@@ -149,7 +162,7 @@ class TrainAdversarialAE():
         pdb.set_trace()
         '''
 
-        return cri_loss.detach().item(),  grad_penalty.detach().item()
+        return cri_loss.detach().item(),  1#grad_penalty.detach().item()
 
     def regularization_train_step(self, data):
         self.enc_reg_opt.zero_grad()
@@ -167,18 +180,26 @@ class TrainAdversarialAE():
     def reconstruction_train_step(self, real_data):
         """Train generator one step"""
 
+        self.critic.eval()
+
         self.enc_opt.zero_grad()
         self.dec_opt.zero_grad()
 
         latent_data = self.encoder(real_data)
         reconstruction = self.decoder(latent_data)
 
-        reconstruction_loss = self.reconstruction_loss_function(reconstruction,
+        critic_generated = self.critic(latent_data)
+        target_generated = torch.ones_like(critic_generated)
+
+        reconstruction_loss = 0.999 * self.reconstruction_loss_function(reconstruction,
                                                                 real_data)
+        reconstruction_loss += 0.001 * self.critic_loss_function(critic_generated, target_generated)
 
         reconstruction_loss.backward()
         self.enc_opt.step()
         self.dec_opt.step()
+
+        self.critic.train()
 
         '''
         a = list(self.decoder.parameters())[0].clone()

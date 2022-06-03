@@ -30,37 +30,37 @@ if __name__ == '__main__':
         device = 'cpu'
 
     dataloader_params = {
-        'num_files': 100000,
+        'num_files': 10000,
         'transformer_state': None,
         'transformer_pars': None,
-        'batch_size': 32,
+        'batch_size': 8,
         'shuffle': True,
-        'num_workers': 8,
+        'num_workers': 16,
         'drop_last': True,
-        'num_states_pr_sample': 64,
-        'sample_size': (128, 512),
+        'num_states_pr_sample': 256,
+        'sample_size': (128, 1024),
         'pars': False
     }
     data_path = 'data/advection_diffusion/train_data/adv_diff'
     dataloader = get_dataloader(data_path, **dataloader_params)
 
-    latent_dim = 8
+    latent_dim = 3
     input_dim = 128
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_neurons': [64, 32],
+        'hidden_neurons': [4, 8, 16, 32],
     }
 
     decoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_neurons': [32, 64],
+        'hidden_neurons': [32, 16, 8, 4],
     }
 
     critic_params = {
         'latent_dim': latent_dim,
-        'hidden_neurons': [64, 64, 64],
+        'hidden_neurons': [64, 64],
     }
 
     encoder = models.Encoder(**encoder_params).to(device)
@@ -69,20 +69,20 @@ if __name__ == '__main__':
 
     critic = models.Critic(**critic_params).to(device)
 
-    recon_learning_rate = 1e-2
-    recon_weight_decay = 1e-8
+    recon_learning_rate = 1e-3
+    recon_weight_decay = 1e-10
 
-    reg_learning_rate = 1e-3
+    reg_learning_rate = recon_learning_rate
 
     encoder_optimizer = torch.optim.Adam(
             encoder.parameters(),
             lr=recon_learning_rate,
-            weight_decay=recon_weight_decay
+            #weight_decay=recon_weight_decay
     )
     decoder_optimizer = torch.optim.Adam(
             decoder.parameters(),
             lr=recon_learning_rate,
-            weight_decay=recon_weight_decay
+            #weight_decay=recon_weight_decay
     )
 
     encoder_reg_optimizer = torch.optim.Adam(
@@ -109,9 +109,9 @@ if __name__ == '__main__':
 
     if train:
         training_params = {
-            'n_critic': 3,
+            'n_critic': 1,
             'gamma': 10,
-            'n_epochs': 200,
+            'n_epochs': 1000,
             'save_string': 'model_weights/AdvAE',
             'device': device
         }
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
         x_list = []
         num_samples = 4
-        for i in range(num_samples):
+        for i in range(100, 100+num_samples):
             x_list.append(dataloader.dataset[i])
         x = torch.stack(x_list)
         x = x.reshape(-1, x.shape[2])
@@ -149,26 +149,29 @@ if __name__ == '__main__':
         z = z.view(num_samples, dataloader_params['num_states_pr_sample'], latent_dim)
         z = z.detach().numpy()
 
-        t1, t2, t3 = 0, 32, 63
+        x = x.detach().numpy()
+        x = x.reshape(num_samples, dataloader_params['num_states_pr_sample'], 128)
+
+        t1, t2, t3 = 0, 100, -1
         idx1, idx2, idx3, idx4 = 0, 1, 2, 3
 
         plt.figure(figsize=(12,16))
         plt.subplot(3,2,1)
         plt.plot(x[idx1, t1], color='tab:blue')
-        plt.plot(pred[idx1, t1], color='tab:red')
+        plt.plot(pred[idx1, t1], '--',color='tab:red')
         plt.plot(x[idx1, t2], color='tab:blue')
-        plt.plot(pred[idx1, t2], color='tab:red')
+        plt.plot(pred[idx1, t2], '--', color='tab:red')
         plt.plot(x[idx1, t3], color='tab:blue')
-        plt.plot(pred[idx1, t3], color='tab:red')
+        plt.plot(pred[idx1, t3], '--', color='tab:red')
         plt.grid()
 
         plt.subplot(3,2,2)
         plt.plot(x[idx2, t1], color='tab:blue')
-        plt.plot(pred[idx2, t1], color='tab:red')
+        plt.plot(pred[idx2, t1], '--', color='tab:red')
         plt.plot(x[idx2, t2], color='tab:blue')
-        plt.plot(pred[idx2, t2], color='tab:red')
+        plt.plot(pred[idx2, t2], '--', color='tab:red')
         plt.plot(x[idx2, t3], color='tab:blue')
-        plt.plot(pred[idx2, t3], color='tab:red')
+        plt.plot(pred[idx2, t3], '--', color='tab:red')
         plt.grid()
 
         plt.subplot(3,2,3)
@@ -179,12 +182,12 @@ if __name__ == '__main__':
         plt.subplot(3,2,4)
         plt.plot(z[idx1, :, 0])
         plt.plot(z[idx1, :, 1])
-        #plt.plot(z[idx1, :, 2])
+        plt.plot(z[idx1, :, 2])
         #plt.plot(z[idx1, :, 3])
         #plt.plot(z[idx1, :, 4])
         plt.grid()
 
-        zz = torch.randn(10, latent_dim)*10
+        zz = torch.randn(10, latent_dim)
         gen_data = decoder(zz).detach().numpy()
 
         plt.subplot(3,2,5)

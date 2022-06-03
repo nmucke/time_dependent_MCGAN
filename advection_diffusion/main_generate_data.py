@@ -27,6 +27,7 @@ def init_condition_gaussian(coef_vec, x_vec):
 def compute_advection_diffusion_sol(solver_params,
                                     PDE_params,
                                     output_time=False):
+
     '''
     coef_mean = np.zeros(solver_params['init_num_coefs'])
     coef_std = np.arange(solver_params['init_num_coefs'],0,-1)
@@ -34,14 +35,14 @@ def compute_advection_diffusion_sol(solver_params,
     coef_vec = np.random.normal(coef_mean, coef_std)
     init = init_condition(coef_vec, x_vec)
     init = init[1:-1]
+
+
     '''
-
-
-    mu = 0
-    sigma = np.random.normal(0.15, 0.05)
+    mu = -0.5
+    sigma = np.random.normal(0.10, 0.05)
 
     #coef_vec = np.array([mu, sigma])
-    coef_vec = np.array([mu, 0.15])
+    coef_vec = np.array([mu, sigma])
     init = init_condition_gaussian(coef_vec, x_vec)
     init = init[1:-1]
 
@@ -93,33 +94,32 @@ if __name__ == '__main__':
     solver_params = {'xmin': -1,
                      'xmax': 1,
                      'num_x': 128,
-                     't_eval': np.linspace(0,2.5,512),
-                     'init_num_coefs': 5}
+                     't_eval': np.linspace(0,1.75,1024),
+                     'init_num_coefs': 3}
 
     x_vec = np.linspace(solver_params['xmin'],
                         solver_params['xmax'],
                         solver_params['num_x'])
-
-
     save_string = 'adv_diff'
     id_list = range(0,10000)
     train_data = True
 
     ray.init(num_cpus=30)
 
-    velocity = np.random.uniform(0.1, 0.5, len(id_list))
-    diffusion = np.random.uniform(0.0075, 0.0125, len(id_list))
+    velocity = np.random.normal(0.4, 0.05, len(id_list))
+    diffusion = np.random.normal(0.005, 0.001, len(id_list))
     for idx in id_list:
-        PDE_params = {'velocity': 0.2,#velocity[idx],
+        PDE_params = {'velocity': velocity[idx],
                       'diffusion': diffusion[idx]}
         generate_and_save_data.remote(save_string=save_string,
                                      save_id=idx,
                                      solver_params=solver_params,
                                      PDE_params=PDE_params,
                                      train_data=train_data)
-
     '''
 
+    PDE_params = {'velocity': 0.58,  # velocity[idx],
+                  'diffusion': 0.009}  # diffusion[idx]}
     t, sol = compute_advection_diffusion_sol(solver_params=solver_params,
                                              PDE_params=PDE_params,
                                              output_time=True)
@@ -146,3 +146,4 @@ if __name__ == '__main__':
 
     plt.show()
     '''
+

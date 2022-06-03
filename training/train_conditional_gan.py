@@ -159,8 +159,8 @@ class TrainConditionalGAN():
 
         generated_data = self.sample(batch_size, conditions)
 
-        #generator_loss = -self.critic(generated_data, conditions).mean()
-        generator_loss = nn.MSELoss()(generated_data, real_data)
+        generator_loss = -self.critic(generated_data, conditions).mean()
+        #generator_loss += nn.L1Loss()(generated_data, real_data)
         generator_loss.backward()
         self.generator_optimizer.step()
 

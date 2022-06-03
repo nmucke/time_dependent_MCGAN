@@ -4,6 +4,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch
 
+import numpy as np
+import matplotlib.pyplot as plt
+import torch.nn as nn
+import torch.optim as optim
+import torch
+
 
 import pdb
 
@@ -109,12 +115,11 @@ class OutConv(nn.Module):
         return self.conv(x)
 
 
-class UNetGenerator(nn.Module):
-    def __init__(self, latent_dim=32, latent_channels=8, in_channels=1, hidden_channels=4, bilinear=False):
-        super(UNetGenerator, self).__init__()
+class Encoder(nn.Module):
+    def __init__(self, latent_dim=32, in_channels=1, hidden_channels=2, bilinear=False):
+        super(Encoder, self).__init__()
         self.in_channels = in_channels
         self.latent_dim = latent_dim
-        self.latent_channels = latent_channels
         self.bilinear = bilinear
         self.activation = nn.LeakyReLU()
         #self.sigmoid = nn.Sigmoid()
@@ -123,57 +128,6 @@ class UNetGenerator(nn.Module):
 
         self.hidden_channels = [hidden_channels*2**i for i in range(5)]
 
-        self.latent_dense = nn.Linear(latent_dim, latent_channels * 8*2)
-
-        self.inc = DoubleConv(in_channels, self.hidden_channels[0], batch_norm=batch_norm)
-        self.down1 = Down(self.hidden_channels[0], self.hidden_channels[1], batch_norm=batch_norm)
-        self.down2 = Down(self.hidden_channels[1], self.hidden_channels[2], batch_norm=batch_norm)
-        self.down3 = Down(self.hidden_channels[2], self.hidden_channels[3], batch_norm=batch_norm)
-        factor = 2 if bilinear else 1
-        self.down4 = Down(self.hidden_channels[3],
-                          self.hidden_channels[4] // factor-latent_channels,
-                          batch_norm=batch_norm)
-
-
-        self.up1 = Up(self.hidden_channels[4],
-                      self.hidden_channels[3]//factor, bilinear)
-        self.up2 = Up(self.hidden_channels[3], self.hidden_channels[2] // factor, bilinear)
-        self.up3 = Up(self.hidden_channels[2], self.hidden_channels[1] // factor, bilinear)
-        self.up4 = Up(self.hidden_channels[1], in_channels, bilinear)
-        #self.out_conv = OutConv(in_channels, in_channels)
-
-
-    def forward(self, z, x):
-        x1 = self.inc(x)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
-
-        z = self.latent_dense(z)
-        z = self.activation(z)
-        z = z.view(z.size(0), self.latent_channels, 8, 2)
-
-        x5 = torch.cat([x5, z], dim=1)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
-        #x = self.activation(x)
-        #x = self.out_conv(x)
-        return x
-
-
-class UNetCritic(nn.Module):
-    def __init__(self, in_channels=1, hidden_channels=4, bilinear=False):
-        super(UNetCritic, self).__init__()
-        self.in_channels = in_channels
-        self.bilinear = bilinear
-        self.activation = nn.Tanh()
-
-        batch_norm = False
-
-        self.hidden_channels = [hidden_channels*2**i for i in range(5)]
 
         self.inc = DoubleConv(in_channels, self.hidden_channels[0], batch_norm=batch_norm)
         self.down1 = Down(self.hidden_channels[0], self.hidden_channels[1], batch_norm=batch_norm)
@@ -183,114 +137,236 @@ class UNetCritic(nn.Module):
         self.down4 = Down(self.hidden_channels[3],
                           self.hidden_channels[4] // factor,
                           batch_norm=batch_norm)
+        self.out_dense = nn.Linear(self.hidden_channels[4]*8*2, self.latent_dim)
 
-        self.dense1 = nn.Linear((self.hidden_channels[4] // factor)* 8 * 4,
-                                self.hidden_channels[4])
-        self.dense2 = nn.Linear(self.hidden_channels[4], 1, bias=False)
 
-    def forward(self, x, c):
-        x = torch.cat([c, x], dim=-1)
+
+    def forward(self, x):
         x = self.inc(x)
         x = self.down1(x)
         x = self.down2(x)
         x = self.down3(x)
         x = self.down4(x)
-
+        x = self.activation(x)
         x = x.view(x.size(0), -1)
+        x = self.out_dense(x)
+        return x
+
+class ForecastingNet(nn.Module):
+    def __init__(self, latent_dim=32, in_channels=1, hidden_channels=2, bilinear=False):
+        super(ForecastingNet, self).__init__()
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.latent_channels = latent_dim
+        self.bilinear = bilinear
+        self.activation = nn.LeakyReLU()
+
+        self.encoder = Encoder(
+                latent_dim=latent_dim,
+                in_channels=in_channels,
+                hidden_channels=hidden_channels,
+                bilinear=bilinear
+        )
+
+        self.out_dense_1 = nn.Linear(latent_dim, latent_dim, bias=True)
+        self.out_conv_1 = nn.ConvTranspose1d(
+                in_channels=latent_dim,
+                out_channels=latent_dim//2,
+                kernel_size=8,
+                stride=4,
+                bias=True
+        )
+        self.out_conv_2 = nn.ConvTranspose1d(
+                in_channels=latent_dim//2,
+                out_channels=latent_dim//4,
+                kernel_size=8,
+                stride=4,
+                bias=True,
+                padding=2
+        )
+        self.out_conv_3 = nn.ConvTranspose1d(
+                in_channels=latent_dim//4,
+                out_channels=1,
+                kernel_size=8,
+                stride=4,
+                bias=False,
+                padding=2
+        )
+        #self.out_dense_2 = nn.Linear(64, 128, bias=False)
+
+    def forward(self, x, return_input=False):
+        x_pred = self.encoder(x)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_dense_1(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = x_pred.view(x.size(0), self.latent_dim, 1)
+        x_pred = self.out_conv_1(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_conv_2(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_conv_3(x_pred)
+        x_pred = x_pred.transpose(1, 2)
+        x_pred = x_pred.unsqueeze(1)
+        x_pred += x[:, :, :, -1:]
+
+        #x_pred = self.out_dense_2(x_pred)
+        if return_input:
+            return torch.cat((x, x_pred), dim=-1)
+        else:
+            return x_pred
+
+
+class ConditionalGenerator(nn.Module):
+    def __init__(self,
+                 z_latent_dim=32,
+                 in_channels=1,
+                 hidden_channels=2,
+                 encoder=None,
+                 bilinear=False
+                 ):
+        super(ConditionalGenerator, self).__init__()
+        self.in_channels = in_channels
+        self.z_latent_dim = z_latent_dim
+        self.bilinear = bilinear
+        self.activation = nn.Sigmoid()
+
+        self.encoder = encoder
+        self.conditional_latent_dim = self.encoder.latent_dim
+
+        self.full_latent_dim = self.conditional_latent_dim + self.z_latent_dim
+
+        self.z_latent_dense = nn.Linear(self.z_latent_dim, self.z_latent_dim)
+
+        self.out_dense_1 = nn.Linear(
+                in_features=self.full_latent_dim,
+                #out_features=self.full_latent_dim,
+                out_features=64,
+                bias=True)
+        self.out_dense_2 = nn.Linear(
+                in_features=64,
+                #out_features=self.full_latent_dim,
+                out_features=64,
+                bias=True)
+
+        self.out_dense_3 = nn.Linear(
+                in_features=64,
+                #out_features=self.full_latent_dim,
+                out_features=128,
+                bias=False)
+        '''
+        self.out_conv_1 = nn.ConvTranspose1d(
+                in_channels=self.full_latent_dim,
+                out_channels=self.full_latent_dim//2,
+                kernel_size=8,
+                stride=4,
+                bias=True
+        )
+        self.out_conv_2 = nn.ConvTranspose1d(
+                in_channels=self.full_latent_dim//2,
+                out_channels=self.full_latent_dim//4,
+                kernel_size=8,
+                stride=4,
+                bias=True,
+                padding=2
+        )
+        self.out_conv_3 = nn.ConvTranspose1d(
+                in_channels=self.full_latent_dim//4,
+                out_channels=1,
+                kernel_size=8,
+                stride=4,
+                bias=False,
+                padding=2
+        )
+        '''
+        #self.out_dense_2 = nn.Linear(64, 128, bias=False)
+
+    def forward(self, z, x, return_input=False):
+        x_pred = self.encoder(x)
+        x_pred = self.activation(x_pred)
+
+        z = self.z_latent_dense(z)
+        z = self.activation(z)
+
+        x_pred = torch.cat((x_pred, z), dim=-1)
+        x_pred = self.out_dense_1(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_dense_2(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_dense_3(x_pred)
+
+        '''
+        x_pred = self.activation(x_pred)
+        x_pred = x_pred.view(x_pred.size(0), self.full_latent_dim, 1)
+        x_pred = self.out_conv_1(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_conv_2(x_pred)
+        x_pred = self.activation(x_pred)
+        x_pred = self.out_conv_3(x_pred)
+        '''
+        x_pred = x_pred.view(x_pred.size(0), 128, 1)
+        x_pred = x_pred.transpose(1, 2)
+        x_pred = x_pred.unsqueeze(1)
+        x_pred = x_pred.transpose(-2, -1)
+        #x_pred += x_pred[:, :, :, -1:]
+
+        if return_input:
+            return torch.cat((x, x_pred), dim=-1)
+        else:
+            return x_pred
+
+
+
+class Critic(nn.Module):
+    def __init__(self, in_channels=1, hidden_channels=4, encoder=None, bilinear=False):
+        super(Critic, self).__init__()
+        self.in_channels = in_channels
+        self.bilinear = bilinear
+        self.activation = nn.Sigmoid()
+
+        batch_norm = False
+
+        self.hidden_channels = [hidden_channels*2**i for i in range(5)]
+
+        '''
+        self.inc = DoubleConv(in_channels, self.hidden_channels[0], batch_norm=batch_norm)
+        self.down1 = Down(self.hidden_channels[0], self.hidden_channels[1], batch_norm=batch_norm)
+        self.down2 = Down(self.hidden_channels[1], self.hidden_channels[2], batch_norm=batch_norm)
+        self.down3 = Down(self.hidden_channels[2], self.hidden_channels[3], batch_norm=batch_norm)
+        factor = 2 if bilinear else 1
+        self.down4 = Down(self.hidden_channels[3],
+                          self.hidden_channels[4] // factor,
+                          batch_norm=batch_norm)
+        '''
+
+        self.encoder = encoder
+
+        self.dense1 = nn.Linear(16,#(self.hidden_channels[4] // 1)* 8 * 2,
+                                self.hidden_channels[4])
+        self.dense2 = nn.Linear(self.hidden_channels[4],#(self.hidden_channels[4] // 1)* 8 * 2,
+                                self.hidden_channels[3])
+        self.dense3 = nn.Linear(self.hidden_channels[3],#(self.hidden_channels[4] // 1)* 8 * 2,
+                                self.hidden_channels[2])
+        self.dense4 = nn.Linear(self.hidden_channels[2], 1, bias=False)
+
+    def forward(self, x):
+        #x = self.inc(x)
+        #x = self.down1(x)
+        #x = self.down2(x)
+        #x = self.down3(x)
+        #x = self.down4(x)
+        x = self.encoder(x)
+
+        #x = x.view(x.size(0), -1)
         x = self.dense1(x)
         x = self.activation(x)
         x = self.dense2(x)
+        x = self.activation(x)
+        x = self.dense3(x)
+        x = self.activation(x)
+        x = self.dense4(x)
         return x
 
 
-'''
-class ConditionalGenerator(nn.Module):
-    def __init__(self,
-                 out_channels=1,
-                 latent_dim=8,
-                 hidden_channels=[8, 8],
-                 conditional_hidden_neurons=[8, 8],
-                 ):
-
-        super(ConditionalGenerator, self).__init__()
-        self.latent_dim = latent_dim
-        self.hidden_channels = hidden_channels + [out_channels]
-        self.activation = nn.LeakyReLU()
-        self.sigmoid = nn.Sigmoid()
-        self.conditional_hidden_neurons = [out_channels] + conditional_hidden_neurons
-
-        stride_space = [2, 2, 2, 2]
-        padding_space = [0, 1, 1, 0]
-        out_pad_space = [0, 0, 0, 0]
-        kernel_size_space = [5, 5, 5, 4]
-
-        stride_time = [2, 2, 2, 2]
-        padding_time = [0, 0, 0, 0]
-        out_pad_time = [0, 0, 1, 0]
-        kernel_size_time = [3, 3, 3, 2]
-
-        self.in_layer = nn.Linear(in_features=self.latent_dim + self.latent_dim,
-                                  out_features=self.hidden_channels[0] * 6)
-
-        self.conv_layers = nn.ModuleList()
-        self.batch_norm_layers = nn.ModuleList()
-        for i in range(len(self.hidden_channels)-1):
-            self.conv_layers.append(
-                nn.ConvTranspose2d(
-                    in_channels=self.hidden_channels[i],
-                    out_channels=self.hidden_channels[i + 1],
-                    kernel_size=(kernel_size_space[i], kernel_size_time[i]),
-                    stride=(stride_space[i], stride_time[i]),
-                    padding=(padding_space[i], padding_time[i]),
-                    output_padding=(out_pad_space[i], out_pad_time[i])
-                )
-            )
-
-        for i in range(len(self.hidden_channels) - 1):
-            self.batch_norm_layers.append(
-                nn.BatchNorm2d(self.hidden_channels[i])
-            )
-
-        self.conditional_encoder_layers = nn.ModuleList()
-        self.batch_norm_encoder_layers = nn.ModuleList()
-        for i in range(len(self.conditional_hidden_neurons)-1):
-            self.conditional_encoder_layers.append(
-                    nn.Conv2d(
-                        in_channels=self.conditional_hidden_neurons[i],
-                        out_channels=self.conditional_hidden_neurons[i+1],
-                        kernel_size=(kernel_size_space[i], kernel_size_time[i]),
-                        stride=(stride_space[i], stride_time[i]),
-                        padding=(padding_space[i], padding_time[i])
-                    )
-            )
-            self.batch_norm_encoder_layers.append(
-                nn.BatchNorm2d(self.conditional_hidden_neurons[i+1])
-            )
-        self.encoder_dense_layer = nn.Linear(
-                in_features=self.conditional_hidden_neurons[-1] * 6,
-                out_features=self.latent_dim
-        )
-
-
-    def forward(self, x, c):
-
-        for i in range(len(self.conditional_hidden_neurons) - 1):
-            c = self.conditional_encoder_layers[i](c)
-            c = self.activation(c)
-            c = self.batch_norm_encoder_layers[i](c)
-        c = c.view(c.size(0), -1)
-        c = self.encoder_dense_layer(c)
-
-        x = torch.cat((x, c), dim=1)
-        x = self.in_layer(x)
-        x = x.view(x.size(0), self.hidden_channels[0], 6, 1)
-        for i in range(len(self.hidden_channels) - 1):
-            x = self.activation(x)
-            x = self.batch_norm_layers[i](x)
-            x = self.conv_layers[i](x)
-
-        return x
-'''
 class ConditionalCritic(nn.Module):
     def __init__(self, in_channels=1, hidden_channels=[]):
         super(ConditionalCritic, self).__init__()

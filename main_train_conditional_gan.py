@@ -20,7 +20,7 @@ if __name__ == '__main__':
     seed_everything()
 
     continue_training = False
-    train = False
+    train = True
 
     if not train:
         continue_training = True
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     dataset = AdvDiffDataset(**dataset_params)
     dataloader = DataLoader(dataset, **dataloader_params)
 
-    latent_dim = 32
+    latent_dim = 150
     input_dim = 128
 
     generator_params = {
@@ -86,14 +86,14 @@ if __name__ == '__main__':
     '''
 
 
-    learning_rate = 1e-2
+    learning_rate = 1e-4
 
-    generator_optimizer = torch.optim.Adam(
+    generator_optimizer = torch.optim.RMSprop(
             generator.parameters(),
-            lr=learning_rate,
+            lr=learning_rate
     )
 
-    critic_optimizer = torch.optim.Adam(
+    critic_optimizer = torch.optim.RMSprop(
             critic.parameters(),
             lr=learning_rate
     )
@@ -120,8 +120,8 @@ if __name__ == '__main__':
         checkpoint = torch.load('model_weights/ConditionalGAN')
         generator.load_state_dict(checkpoint['generator_state_dict'])
 
-        c = dataloader.dataset[10][0]
-        x_true = dataloader.dataset[10][1].unsqueeze(1)
+        c = dataloader.dataset[0][0]
+        x_true = dataloader.dataset[0][1].unsqueeze(1)
 
         z = torch.randn(1, latent_dim, requires_grad=True).to(device)
         z_optimizer = torch.optim.Adam([z], lr=1e-0)
@@ -130,6 +130,7 @@ if __name__ == '__main__':
         x = c.unsqueeze(1).to(device)
         for i in range(len(x_true)):
             pbar = tqdm(range(100))
+            '''
             for j in pbar:
                 z_optimizer.zero_grad()
                 pred = generator(z, c[i:i+1].unsqueeze(1).to(device))
@@ -140,6 +141,7 @@ if __name__ == '__main__':
                 pbar.set_postfix({"loss": loss.item(),
                                   "step": i,
                                   "of": len(x_true)})
+            '''
 
             x = generator(z, c[i:i+1].unsqueeze(1).to(device))
             #pred = pred.mean(dim=0).unsqueeze(0)

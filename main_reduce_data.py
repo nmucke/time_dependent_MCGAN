@@ -15,52 +15,60 @@ if __name__ == '__main__':
 
     seed_everything()
 
+    num_time_steps = 1024
     dataloader_params = {
-        'num_files': 100000,
+        'num_files': 10000,
         'transformer_state': None,
         'transformer_pars': None,
         'batch_size': 32,
         'shuffle': True,
         'num_workers': 8,
         'drop_last': True,
-        'num_states_pr_sample': 64,
-        'sample_size': (128, 512),
-        'pars': False
+        'num_states_pr_sample': num_time_steps,
+        'sample_size': (128, num_time_steps),
+        'pars': True
     }
     data_path = 'data/advection_diffusion/train_data/adv_diff'
     dataloader = get_dataloader(data_path, **dataloader_params)
 
-    latent_dim = 8
+    latent_dim = 3
     input_dim = 128
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_neurons': [64, 32],
+        'hidden_neurons': [4, 8, 16, 32],
     }
 
-    latent_dim = 8
     encoder = models.Encoder(**encoder_params).to('cuda')
-    load_checkpoint(
-        checkpoint_path='model_weights/AdvAE',
-        encoder=encoder,
-        )
 
-    reduced_data = torch.zeros(dataloader_params['num_files'], 512, latent_dim)
-    for i, data in enumerate(dataloader):
+    checkpoint_path = 'model_weights/AdvAE'
+    checkpoint = torch.load(checkpoint_path)
+    encoder.load_state_dict(checkpoint['encoder_state_dict'])
+
+
+    reduced_data = torch.zeros(dataloader_params['num_files'], num_time_steps, latent_dim)
+    reduced_data_pars = torch.zeros(dataloader_params['num_files'], num_time_steps, 2)
+    for i, (data, pars) in enumerate(dataloader):
 
         batch_size = data.shape[0]
 
         data = data.reshape(-1, data.shape[2])
         data = data.to('cuda')
 
+        pars = pars.reshape(-1, 1, pars.shape[1])
+        pars = pars.repeat(1, num_time_steps, 1)
+        reduced_data_pars[i * dataloader_params['batch_size']:i * dataloader_params[
+            'batch_size'] + batch_size] = pars
+
         z = encoder(data)
 
-        z = z.view(batch_size, 512, latent_dim).cpu().detach()
+        z = z.view(batch_size, num_time_steps, latent_dim).cpu().detach()
         reduced_data[i*dataloader_params['batch_size']:i*dataloader_params['batch_size']+batch_size] = z
 
         print(f'{i} of {len(dataloader)}')
 
     np.save('reduced_data', reduced_data.numpy())
+    np.save('reduced_data_pars', reduced_data_pars.numpy())
 
     '''
     plt.figure()

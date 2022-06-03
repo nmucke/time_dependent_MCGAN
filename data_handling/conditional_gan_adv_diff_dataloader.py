@@ -20,7 +20,12 @@ class AdvDiffDataset(torch.utils.data.Dataset):
         self.num_states_pr_sample = num_states_pr_sample
         self.num_x = sample_size[0]
         self.num_t = sample_size[1]
-        self.window_size = window_size
+        if len(window_size) == 2:
+            self.window_size = window_size[0]
+            self.window_size_pred = window_size[1]
+        else:
+            self.window_size = window_size
+            self.window_size_pred = window_size
 
         self.state_IDs = [i for i in range(self.num_files)]
 
@@ -57,16 +62,15 @@ class AdvDiffDataset(torch.utils.data.Dataset):
         state = data['sol']
         state = state[:, sample_time_ids]
 
-        state_conditions = np.zeros((self.num_states_pr_sample-2*self.window_size,
+        state_conditions = np.zeros((self.num_states_pr_sample-(self.window_size+self.window_size_pred),
                                     self.num_x,
                                     self.window_size))
-        state_pred = np.zeros((self.num_states_pr_sample-2*self.window_size,
+        state_pred = np.zeros((self.num_states_pr_sample-(self.window_size+self.window_size_pred),
                                     self.num_x,
-                                    self.window_size))
-
-        for i in range(self.window_size, state.shape[-1]-self.window_size):
-            state_conditions[i-self.window_size, :, :] = state[:, i-self.window_size:i]
-            state_pred[i-self.window_size, :, :] = state[:, i:i+self.window_size]
+                                    self.window_size_pred))
+        for i in range(self.num_states_pr_sample-self.window_size-self.window_size_pred):
+            state_conditions[i] = state[:, i:i+self.window_size]
+            state_pred[i] = state[:, i+self.window_size:i+self.window_size+self.window_size_pred]
 
         return torch.tensor(state_conditions, dtype=torch.get_default_dtype()), \
             torch.tensor(state_pred, dtype=torch.get_default_dtype())
