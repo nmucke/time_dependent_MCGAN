@@ -20,7 +20,7 @@ if __name__ == '__main__':
     with_koopman_training = False
     with_adversarial_training = True
     continue_training = False
-    train = True
+    train = False
 
     if not train:
         continue_training = True
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     transformer_pars = TransformPars()
     num_states_pr_sample = 512
     dataset_params = {
-        'num_files': 1250,
+        'num_files': 2000,
         'num_states_pr_sample': num_states_pr_sample,
         'sample_size': (1000, 256),
         'pars': True,
@@ -66,19 +66,19 @@ if __name__ == '__main__':
     )
     dataloader = DataLoader(dataset, **dataloader_params)
 
-    latent_dim = 8
+    latent_dim = 16
     par_dim = 2
-    input_dim = 128
+    input_dim = 256
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_channels': [8, 16, 32, 64, 128],
+        'hidden_channels': [16, 32, 64, 128, 256],
     }
 
     decoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_channels': [128, 64, 32, 16, 8],
+        'hidden_channels': [256, 128, 64, 32, 16],
     }
 
     critic_params = {
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     critic = models.Critic(**critic_params).to(device)
     koopman = models.Koopman(**koopman_params).to(device)
 
-    recon_learning_rate = 1e-3
+    recon_learning_rate = 1e-2
     recon_weight_decay = 1e-6
     koopman_weight_decay = 1e-5
 
@@ -126,7 +126,7 @@ if __name__ == '__main__':
 
     if continue_training:
 
-        load_string = 'AE_pipe_flow'
+        load_string = 'AE_pipe_flow_large_' + str(latent_dim)
         if with_koopman_training and with_adversarial_training:
             load_string += '_koopman_adversarial'
         elif with_adversarial_training:
@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
 
     if train:
-        save_string = 'AE_pipe_flow_' + str(latent_dim)
+        save_string = 'AE_pipe_flow_large_' + str(latent_dim)
         if with_koopman_training and with_adversarial_training:
             save_string += '_koopman_adversarial'
         elif with_adversarial_training:
@@ -260,7 +260,7 @@ if __name__ == '__main__':
         #plt.grid()
 
         plt.subplot(4,1,3)
-        for i in range(3):
+        for i in range(4):
             plt.plot(z[idx1, :, i])
         plt.grid()
 

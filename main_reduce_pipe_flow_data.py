@@ -21,11 +21,11 @@ if __name__ == '__main__':
     with_koopman_training = False
     with_adversarial_training = True
 
-    num_time_steps = 2000
+    num_time_steps = 1000
     dataset_params = {
-        'num_files': 220,
-        'num_states_pr_sample': 2000,
-        'sample_size': (2000, 256),
+        'num_files': 2000,
+        'num_states_pr_sample': 1000,
+        'sample_size': (1000, 256),
         'pars': True,
         'with_koopman_training': with_koopman_training,
     }
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     transformer_pars = TransformPars()
 
     for i, (state, pars) in enumerate(dataloader):
-        transformer_state.partial_fit(state.numpy().reshape(batch_size*2000, 2, 256))
+        transformer_state.partial_fit(state.numpy().reshape(batch_size*num_time_steps, 2, 256))
         transformer_pars.partial_fit(pars.numpy())
 
     dataset = PipeFlowDataset(
@@ -56,17 +56,17 @@ if __name__ == '__main__':
     )
     dataloader = DataLoader(dataset, **dataloader_params)
 
-    latent_dim = 8
+    latent_dim = 16
     input_dim = 128
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_channels': [8, 16, 32, 64, 128],
+        'hidden_channels': [16, 32, 64, 128, 256],
     }
 
     encoder = models.Encoder(**encoder_params).to('cuda')
 
-    load_string = 'AE_pipe_flow'
+    load_string = 'AE_pipe_flow_large_' + str(latent_dim)
     if with_koopman_training and with_adversarial_training:
         load_string += '_koopman_adversarial'
     elif with_adversarial_training:
@@ -100,8 +100,8 @@ if __name__ == '__main__':
 
         print(f'{i} of {len(dataloader)}')
 
-    np.save('reduced_data_pipe_flow', reduced_data.numpy())
-    np.save('reduced_data_pipe_flow_pars', reduced_data_pars.numpy())
+    np.save('reduced_data_pipe_flow_' + str(latent_dim), reduced_data.numpy())
+    np.save('reduced_data_pipe_flow_pars_' + str(latent_dim), reduced_data_pars.numpy())
 
     '''
     plt.figure()

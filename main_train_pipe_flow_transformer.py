@@ -39,18 +39,18 @@ if __name__ == '__main__':
 
     input_window_size = 16
     output_window_size = 32
-    latent_dim = 8
+    latent_dim = 16
     par_dim = 2
-    num_states_pr_sample = 512
-    num_t = 2000
+    num_states_pr_sample = 1000
+    num_t = 1000
     num_x = 256
-    num_samples = 220
+    num_samples = 2000
 
     ##### Load data #####
-    data = np.load('reduced_data_pipe_flow.npy')
+    data = np.load('reduced_data_pipe_flow_' + str(latent_dim) + '.npy')
     data = torch.tensor(data, dtype=torch.get_default_dtype())
 
-    data_pars = np.load('reduced_data_pipe_flow_pars.npy')
+    data_pars = np.load('reduced_data_pipe_flow_pars_' + str(latent_dim) + '.npy')
     data_pars = data_pars.reshape(-1, 2)
     #pars_transformer = StandardScaler()
     #pars_transformer.fit(data_pars)
@@ -65,9 +65,8 @@ if __name__ == '__main__':
         'num_samples': num_samples
     }
     dataloader_parameters = {
-        'batch_size': 4,
+        'batch_size': 1,
         'shuffle': True,
-        'num_workers': 1
     }
     dataset = LatentDatasetTransformersCustom(
         data,
@@ -100,23 +99,23 @@ if __name__ == '__main__':
 
 
     ##### Load encoder/decoder model#####
-    input_dim = 128
+    input_dim = 256
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_channels': [8, 16, 32, 64, 128],
+        'hidden_channels': [16, 32, 64, 128, 256],
     }
 
     decoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_channels': [128, 64, 32, 16, 8],
+        'hidden_channels': [256, 128, 64, 32, 16],
     }
     encoder = models.Encoder(**encoder_params)
     decoder = models.Decoder(**decoder_params)
 
 
-    load_string = 'AE_pipe_flow'
+    load_string = 'AE_pipe_flow_large_' + str(latent_dim)
     if with_koopman_training and with_adversarial_training:
         load_string += '_koopman_adversarial'
     elif with_adversarial_training:
@@ -130,18 +129,15 @@ if __name__ == '__main__':
     encoder.load_state_dict(checkpoint['encoder_state_dict'])
     decoder.load_state_dict(checkpoint['decoder_state_dict'])
 
-    encoder = encoder.to(device)
-    decoder = decoder.to(device)
-
     encoder.eval()
     decoder.eval()
     ##### Define prediction model #####
     prediction_model_params = {
         'latent_dim': latent_dim,
         'pars_dim': par_dim,
-        'num_layers': 1,
+        'num_layers': 2,
         'embed_dim': 64,
-        'num_heads': 2,
+        'num_heads': 1,
         'hidden_mlp_dim': 64,
         'out_features': latent_dim,
         'dropout_rate': 0.0,
@@ -154,7 +150,7 @@ if __name__ == '__main__':
     ##### Define optimizer #####
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=1e-4,
+        lr=1e-5,
         weight_decay=1e-10
     )
 
@@ -223,16 +219,16 @@ if __name__ == '__main__':
                     'epoch': epoch
                 })
 
-            teacher_forcing_rate = teacher_forcing_rate * 0.995
+            teacher_forcing_rate = teacher_forcing_rate * 0.98
 
             scheduler.step()
 
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-            }, 'model_weights/transformer_model_pipe_flow')
+            }, 'model_weights/transformer_model_pipe_flow_new')
     else:
-        checkpoint_path = 'model_weights/transformer_model_pipe_flow'
+        checkpoint_path = 'model_weights/transformer_model_pipe_flow_new'
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -240,14 +236,16 @@ if __name__ == '__main__':
     sample_time_ids = np.linspace(0, num_t, num_states_pr_sample,
                                   dtype=int, endpoint=False)
 
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+
 
     transformer_state = TransformState()
     transformer_pars = TransformPars()
-    num_states_pr_sample = 512
     dataset_params = {
-        'num_files': 4000,
+        'num_files': 2000,
         'num_states_pr_sample': num_states_pr_sample,
-        'sample_size': (2000, 256),
+        'sample_size': (num_t, 256),
         'pars': True,
         'with_koopman_training': with_koopman_training,
     }
@@ -255,7 +253,6 @@ if __name__ == '__main__':
     dataloader_params = {
         'batch_size': batch_size,
         'shuffle': True,
-        'num_workers': 4,
         'drop_last': True,
     }
     data_path = 'pipe_flow/data/pipe_flow'
@@ -265,7 +262,7 @@ if __name__ == '__main__':
     for i, (state, pars) in enumerate(dataloader):
         transformer_state.partial_fit(state.numpy().reshape(batch_size*num_states_pr_sample, 2, 256))
         transformer_pars.partial_fit(pars.numpy())
-    error = 0
+    error = []
     plt.figure(figsize=(12, 12))
     for j in range(0, 3):
 
@@ -302,17 +299,17 @@ if __name__ == '__main__':
         true_state = true_state.detach().cpu().numpy()
         true_latent = true_latent.detach().cpu().numpy()
 
-        plt.subplot(6, 1, 2*j-1+2)
+        plt.subplot(7, 1, 2*j-1+2)
         plt.plot(true_latent[:, 0], label='target', color='tab:blue')
-        #plt.plot(true_latent[:, 1], color='tab:blue')
+        plt.plot(true_latent[:, 1], color='tab:blue')
         #plt.plot(true_latent[:, 2], color='tab:blue')
         plt.plot(latent_preds[:, 0], label='prediction', color='tab:orange')
-        #plt.plot(latent_preds[:, 1], color='tab:orange')
+        plt.plot(latent_preds[:, 1], color='tab:orange')
         #plt.plot(latent_preds[:, 2], color='tab:orange')
         #plt.legend()
         plt.grid()
 
-        plt.subplot(6, 1, 2*j+2)
+        plt.subplot(7, 1, 2*j+2)
         plt.plot(true_state[10, 0, :], label='true', color='tab:blue')
         plt.plot(true_state[150, 0, :], color='tab:blue')
         plt.plot(true_state[-1, 0, :], color='tab:blue')
@@ -322,10 +319,17 @@ if __name__ == '__main__':
         #plt.legend()
         plt.grid()
 
-        error += np.linalg.norm(true_state - state_preds)/np.linalg.norm(true_state)
-    print(error/(j+1))
+        error.append(np.linalg.norm(true_state - state_preds, axis=(1,2))/np.linalg.norm(true_state, axis=(1,2)))
+
+    plt.subplot(7,1,7)
+    for i in range(j+1):
+        plt.semilogy(error[i])
+    plt.grid()
     plt.show()
 
+
+
+    print(np.mean(np.asarray(error)))
     '''
     error = 0
     for k in range(100):
