@@ -120,11 +120,12 @@ class lstm_seq2seq(nn.Module):
         self.par_size = par_size
         self.num_layers = num_layers
         self.temporal_latent_dim = temporal_latent_dim
+        self.par_out_dim = hidden_size//4
 
         self.encoder = lstm_encoder(input_size=input_size,
                                     hidden_size=hidden_size,
                                     num_layers=num_layers)
-        self.decoder = lstm_decoder(input_size=input_size + hidden_size//2,
+        self.decoder = lstm_decoder(input_size=input_size + self.par_out_dim ,
                                     output_size=output_size,
                                     hidden_size=hidden_size,# + temporal_latent_dim,
                                     num_layers=num_layers)
@@ -132,7 +133,7 @@ class lstm_seq2seq(nn.Module):
         self.par_dense = nn.Sequential(
             nn.Linear(par_size, hidden_size//2),
             nn.LeakyReLU(),
-            nn.Linear(hidden_size//2, hidden_size//2),
+            nn.Linear(hidden_size//2, self.par_out_dim),
         )
         '''
         self.temporal_latent_dense = nn.Sequential(
@@ -166,9 +167,9 @@ class lstm_seq2seq(nn.Module):
 
         # decode input_tensor
         decoder_input = input_tensor[-1]
-        decoder_input = torch.cat((decoder_input, self.par_dense(pars[-1])), dim=-1)
+        par_dense_out = self.par_dense(pars[-1])
+        decoder_input = torch.cat((decoder_input, par_dense_out), dim=-1)
         #decoder_input = self.par_dense(pars[-1])
-
         #z = torch.randn(self.num_layers, batch_size, self.temporal_latent_dim, device=input_tensor.device)
         decoder_hidden = encoder_hidden
         #decoder_hidden = (torch.cat((decoder_hidden[0], z), dim=-1),
@@ -182,7 +183,8 @@ class lstm_seq2seq(nn.Module):
                                                               decoder_hidden)
                 outputs[t] = decoder_output.squeeze(0)
                 decoder_input = teacher_forcing[t]
-                decoder_input = torch.cat((decoder_input, self.par_dense(pars[-1])), dim=-1)
+                decoder_input = torch.cat((decoder_input, par_dense_out), dim=-1)
+                #decoder_input = self.par_dense(pars[-1])
 
         else:
             for t in range(target_len):
@@ -190,7 +192,8 @@ class lstm_seq2seq(nn.Module):
                                                               decoder_hidden)
                 outputs[t] = decoder_output.squeeze(0)
                 decoder_input = decoder_output
-                decoder_input = torch.cat((decoder_input, self.par_dense(pars[-1])), dim=-1)
+                decoder_input = torch.cat((decoder_input, par_dense_out), dim=-1)
+                #decoder_input = self.par_dense(pars[-1])
 
 
         return outputs

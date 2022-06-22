@@ -89,18 +89,18 @@ if __name__ == '__main__':
         total_time_steps=total_steps
     )
 
-    true_z_state, true_pars = data.get_data(state_case=1, par_case=1)
+    true_z_state, true_pars = data.get_data(state_case=110, par_case=110)
     hf_state = data.get_high_fidelity_state(true_z_state, decoder)
 
-    space_obs_ids = torch.arange(0, 128, 10, device=device)
-    time_obs_ids = torch.arange(0, 256, 50, device=device)
+    space_obs_ids = torch.arange(0, 128, 15, device=device)
+    time_obs_ids = torch.arange(0, 256, 30, device=device)
     time_obs_mask = torch.zeros(num_states_pr_sample, dtype=torch.bool, device=device)
     time_obs_mask[time_obs_ids] = 1
 
     space_observation_operator = lambda x: space_obs_operator(x, space_obs_ids)
     observations = space_observation_operator(hf_state)
 
-    std_obs = 0.1
+    std_obs = 0.01
     observations += torch.randn(observations.shape, device=device) * std_obs
 
     ##### Prepare posterior #####
@@ -111,7 +111,7 @@ if __name__ == '__main__':
         'device': device,
         'obs_operator': space_observation_operator,
         'std_obs': std_obs,
-        'forecast_std': .25,
+        'forecast_std': 2.,
         'latent_dim': latent_dim,
         'num_obs': len(space_obs_ids),
         'with_pars': True
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     pars_history_init = pars_history_init.unsqueeze(1)
 
     ##### Run assimilation #####
-    num_assimilation_steps = 220
+    num_assimilation_steps = 200
     total_steps = num_assimilation_steps + input_window_size
     pbar = tqdm(range(input_window_size, total_steps), total=num_assimilation_steps)
     z_sol = z_history_init.clone()
@@ -165,7 +165,7 @@ if __name__ == '__main__':
             z_MAP, pars_MAP = data_assimlation.compute_z_MAP_with_observations(
                     z=z,
                     pars=pars,
-                    num_iterations=20,
+                    num_iterations=15,
                     print_progress=True
             )
             z_sol = torch.cat((z_sol, z_MAP.unsqueeze(0)), dim=0)
@@ -183,7 +183,7 @@ if __name__ == '__main__':
                     target_len=count_since_last_obs,
                     left_BC=left_BC,
                     right_BC=right_BC,
-                    num_iterations=20
+                    num_iterations=10
             )
             z_sol[-(input_window_size+count_since_last_obs):-count_since_last_obs] = z_history
             z_sol[-count_since_last_obs:] = z_new
@@ -261,8 +261,8 @@ if __name__ == '__main__':
     plt.legend()
 
     plt.subplot(4,1,3)
-    plt.plot(assimilation_error, color='tab:blue', label='Assimilation')
-    plt.plot(no_assimilation_error, color='tab:green', label='No Assimilation')
+    plt.semilogy(assimilation_error, color='tab:blue', label='Assimilation')
+    plt.semilogy(no_assimilation_error, color='tab:green', label='No Assimilation')
     for i in range(time_obs_ids[0:total_steps].shape[0]):
         plt.axvline(x=time_obs_ids[i], color='black', alpha=0.5, linewidth=0.5)
     plt.legend()

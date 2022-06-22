@@ -3,11 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from data_handling.adv_diff_dataloader import get_dataloader
-import models.adv_diff_models.adversarial_AE as models
+import models.pipe_flow_models.autoencoder as models
 from utils.seed_everything import seed_everything
 from training.train_adversarial_AE import TrainAdversarialAE
 import torch.nn as nn
 from utils.load_checkpoint import load_checkpoint
+from torch.utils.data import DataLoader
+from data_handling.pipe_flow_dataloader import PipeFlowDataset, TransformState, TransformPars
 
 torch.set_default_dtype(torch.float32)
 
@@ -19,33 +21,52 @@ if __name__ == '__main__':
     with_koopman_training = False
     with_adversarial_training = True
 
-    num_time_steps = 512
-    dataloader_params = {
-        'num_files': 10000,
-        'transformer_state': None,
-        'transformer_pars': None,
-        'batch_size': 32,
-        'shuffle': True,
-        'num_workers': 8,
-        'drop_last': True,
-        'num_states_pr_sample': num_time_steps,
-        'sample_size': (128, num_time_steps),
-        'pars': True
+    num_time_steps = 2000
+    dataset_params = {
+        'num_files': 220,
+        'num_states_pr_sample': 2000,
+        'sample_size': (2000, 256),
+        'pars': True,
+        'with_koopman_training': with_koopman_training,
     }
-    data_path = 'data/advection_diffusion/train_data/adv_diff'
-    dataloader = get_dataloader(data_path, **dataloader_params)
+    batch_size = 4
+    dataloader_params = {
+        'batch_size': batch_size,
+        'shuffle': True,
+        'num_workers': 1,
+        'drop_last': True,
+    }
 
-    latent_dim = 4
+    data_path = 'pipe_flow/data/pipe_flow'
+    dataset = PipeFlowDataset(data_path, **dataset_params)
+    dataloader = DataLoader(dataset, **dataloader_params)
+
+    transformer_state = TransformState()
+    transformer_pars = TransformPars()
+
+    for i, (state, pars) in enumerate(dataloader):
+        transformer_state.partial_fit(state.numpy().reshape(batch_size*2000, 2, 256))
+        transformer_pars.partial_fit(pars.numpy())
+
+    dataset = PipeFlowDataset(
+            data_path,
+            **dataset_params,
+            transformer_state=transformer_state,
+            transformer_pars=transformer_pars
+    )
+    dataloader = DataLoader(dataset, **dataloader_params)
+
+    latent_dim = 8
     input_dim = 128
     encoder_params = {
         'input_dim': input_dim,
         'latent_dim': latent_dim,
-        'hidden_neurons': [4, 8, 16, 32],
+        'hidden_channels': [8, 16, 32, 64, 128],
     }
 
     encoder = models.Encoder(**encoder_params).to('cuda')
 
-    load_string = 'AE'
+    load_string = 'AE_pipe_flow'
     if with_koopman_training and with_adversarial_training:
         load_string += '_koopman_adversarial'
     elif with_adversarial_training:
@@ -58,13 +79,13 @@ if __name__ == '__main__':
     encoder.load_state_dict(checkpoint['encoder_state_dict'])
 
 
-    reduced_data = torch.zeros(dataloader_params['num_files'], num_time_steps, latent_dim)
-    reduced_data_pars = torch.zeros(dataloader_params['num_files'], num_time_steps, 2)
+    reduced_data = torch.zeros(dataset_params['num_files'], num_time_steps, latent_dim)
+    reduced_data_pars = torch.zeros(dataset_params['num_files'], num_time_steps, 2)
     for i, (data, pars) in enumerate(dataloader):
 
         batch_size = data.shape[0]
 
-        data = data.reshape(-1, data.shape[2])
+        data = data.reshape(-1, data.shape[2], data.shape[3])
         data = data.to('cuda')
 
         pars = pars.reshape(-1, 1, pars.shape[1])
@@ -79,8 +100,8 @@ if __name__ == '__main__':
 
         print(f'{i} of {len(dataloader)}')
 
-    np.save('reduced_data', reduced_data.numpy())
-    np.save('reduced_data_pars', reduced_data_pars.numpy())
+    np.save('reduced_data_pipe_flow', reduced_data.numpy())
+    np.save('reduced_data_pipe_flow_pars', reduced_data_pars.numpy())
 
     '''
     plt.figure()

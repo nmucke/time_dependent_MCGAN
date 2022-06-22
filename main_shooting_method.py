@@ -72,8 +72,8 @@ if __name__ == '__main__':
     time_vec = np.linspace(t_start, t_end, num_states_pr_sample, endpoint=False)
     dt = time_vec[1] - time_vec[0]
 
-    num_steps = 22
-    input_window = 16
+    num_steps = 30
+    input_window = 32
     init_history = true_z_state[0:input_window]
     pars = pars[0:1]
     LSTM_state = LSTM_time_integrator(

@@ -94,20 +94,20 @@ if __name__ == '__main__':
     solver_params = {'xmin': -1,
                      'xmax': 1,
                      'num_x': 128,
-                     't_eval': np.linspace(0,1.75,1024),
+                     't_eval': np.linspace(0,1.75,512),
                      'init_num_coefs': 3}
 
     x_vec = np.linspace(solver_params['xmin'],
                         solver_params['xmax'],
                         solver_params['num_x'])
     save_string = 'adv_diff'
-    id_list = range(0,10000)
+    id_list = range(2000, 10000)
     train_data = True
 
     ray.init(num_cpus=30)
 
-    velocity = np.random.normal(0.4, 0.05, len(id_list))
-    diffusion = np.random.normal(0.005, 0.001, len(id_list))
+    velocity = np.random.normal(0.45, 0.05, len(id_list))
+    diffusion = np.random.normal(0.007, 0.001, len(id_list))
     for idx in id_list:
         PDE_params = {'velocity': velocity[idx],
                       'diffusion': diffusion[idx]}
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     '''
 
     PDE_params = {'velocity': 0.58,  # velocity[idx],
-                  'diffusion': 0.009}  # diffusion[idx]}
+                  'diffusion': 0.003}  # diffusion[idx]}
     t, sol = compute_advection_diffusion_sol(solver_params=solver_params,
                                              PDE_params=PDE_params,
                                              output_time=True)
@@ -145,5 +145,6 @@ if __name__ == '__main__':
     plt.grid()
 
     plt.show()
+
     '''
 

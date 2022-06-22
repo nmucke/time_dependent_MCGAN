@@ -5,9 +5,13 @@ import torch.optim as optim
 import torch
 
 def load_checkpoint(checkpoint_path, encoder=None, decoder=None, critic=None,
-                    encoder_optimizer=None, encoder_reg_optimizer=None,
+                    koopman=None,
+                    encoder_optimizer=None,
+                    encoder_reg_optimizer=None,
                     decoder_optimizer=None,
-                      critic_optimizer=None):
+                    critic_optimizer=None,
+                    koopman_optimizer=None
+                    ):
     checkpoint = torch.load(checkpoint_path)
 
     if encoder_optimizer is not None:
@@ -22,6 +26,10 @@ def load_checkpoint(checkpoint_path, encoder=None, decoder=None, critic=None,
     if critic_optimizer is not None:
         critic_optimizer.load_state_dict(
                 checkpoint['critic_optimizer_state_dict'])
+    if koopman_optimizer is not None:
+        koopman_optimizer.load_state_dict(
+                checkpoint['koopman_optimizer_state_dict'])
+
 
     if encoder is not None:
         encoder.load_state_dict(checkpoint['encoder_state_dict'])
@@ -29,3 +37,5 @@ def load_checkpoint(checkpoint_path, encoder=None, decoder=None, critic=None,
         decoder.load_state_dict(checkpoint['decoder_state_dict'])
     if critic is not None:
         critic.load_state_dict(checkpoint['critic_state_dict'])
+    if koopman is not None:
+        koopman.load_state_dict(checkpoint['koopman_state_dict'])

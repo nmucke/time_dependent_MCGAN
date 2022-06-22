@@ -100,6 +100,7 @@ class TrainAdversarialAE():
         for bidx, real_data in tqdm(enumerate(dataloader),
                  total=int(len(dataloader.dataset)/dataloader.batch_size)):
 
+            pdb.set_trace()
             real_data_shape = real_data.shape
             #real_data = real_data.reshape(-1, 1, real_data_shape[2])
             real_data = real_data.reshape(-1, real_data_shape[2])

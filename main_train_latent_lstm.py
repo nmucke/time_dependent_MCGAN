@@ -20,6 +20,9 @@ if __name__ == '__main__':
 
     seed_everything()
 
+    with_koopman_training = False
+    with_adversarial_training = True
+
     continue_training = False
     train = False
 
@@ -36,7 +39,10 @@ if __name__ == '__main__':
 
     input_window_size = 16
     output_window_size = 32
-    latent_dim = 3
+    latent_dim = 4
+    num_samples = 2000
+    num_t = 512
+    num_states_pr_sample = 512
 
     ##### Load data #####
     data = np.load('reduced_data.npy')
@@ -45,12 +51,12 @@ if __name__ == '__main__':
     data_pars = np.load('reduced_data_pars.npy')
     data_pars = data_pars.reshape(-1, 2)
     data_pars = StandardScaler().fit_transform(data_pars)
-    data_pars = data_pars.reshape(10000, 1024, 2)
+    data_pars = data_pars.reshape(num_samples, num_t, 2)
     data_pars = torch.tensor(data_pars, dtype=torch.get_default_dtype())
 
     dataset_parameters = {
-        'num_states_pr_sample': 256,
-        'sample_size': (latent_dim, 1024),
+        'num_states_pr_sample': num_states_pr_sample,
+        'sample_size': (latent_dim, num_t),
         'window_size': (input_window_size, output_window_size),
     }
     dataloader_parameters = {
@@ -84,7 +90,16 @@ if __name__ == '__main__':
     decoder = models.Decoder(**decoder_params)
     decoder.eval()
 
-    checkpoint_path = 'model_weights/AdvAE'
+
+    load_string = 'AE'
+    if with_koopman_training and with_adversarial_training:
+        load_string += '_koopman_adversarial'
+    elif with_adversarial_training:
+        load_string += '_adversarial'
+    elif with_koopman_training:
+        load_string += '_koopman'
+
+    checkpoint_path = 'model_weights/' + load_string
     checkpoint = torch.load(checkpoint_path)
 
     encoder.load_state_dict(checkpoint['encoder_state_dict'])
@@ -94,8 +109,8 @@ if __name__ == '__main__':
     model = time_models.lstm_seq2seq(
             input_size=latent_dim,
             output_size=latent_dim,
-            hidden_size=16,
-            num_layers=2,
+            hidden_size=32,
+            num_layers=1,
             par_size=2
     ).to(device)
 
@@ -108,7 +123,7 @@ if __name__ == '__main__':
 
     ##### Train model #####
 
-    teacher_forcing_ratio = 0.40
+    teacher_forcing_ratio = 1.
 
     if train:
         num_epochs = 1000
@@ -163,7 +178,7 @@ if __name__ == '__main__':
                     'epoch': epoch
                 })
 
-            teacher_forcing_ratio *= 0.85
+            teacher_forcing_ratio *= 0.975
 
             torch.save({
                 'model_state_dict': model.state_dict(),
